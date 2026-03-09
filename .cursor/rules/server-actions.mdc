@@ -1,0 +1,73 @@
+---
+description: Server Action conventions — Zod validation, error handling, env guards
+globs: "**/actions.ts"
+alwaysApply: false
+---
+
+# Server Actions
+
+## Rules
+- File must start with `"use server"`
+- Never use `useActionState` — redirect on error instead so forms stay as Server Components
+- Always validate FormData with Zod before calling any external service
+- Never import from `"zod"` directly — always use `@/lib/validation`
+
+## FormData validation
+`formData.get()` returns `File | string | null`. Never cast with `as string`.
+Pass raw values to Zod — it handles type checking and produces clean error messages.
+
+```typescript
+// ❌ BAD
+const email = formData.get("email") as string;
+
+// ✅ GOOD — Zod validates types, presence, and format in one step
+const result = loginSchema.safeParse({
+  email: formData.get("email"),
+  password: formData.get("password"),
+});
+if (!result.success) {
+  redirect(buildFieldErrorUrl("/login", result.error.flatten().fieldErrors));
+}
+const { email, password } = result.data; // fully typed and safe
+```
+
+## Error handling — two levels
+
+Zod field errors → `?{fieldName}Error=` params (shown inline next to each input).
+Service/Supabase errors → `?error=` param (shown as a form-level alert).
+
+```typescript
+// ✅ GOOD pattern
+export async function signIn(formData: FormData) {
+  const result = loginSchema.safeParse({ email: formData.get("email"), ... });
+  if (!result.success) {
+    redirect(buildFieldErrorUrl("/login", result.error.flatten().fieldErrors));
+  }
+  const { error } = await supabase.auth.signInWithPassword(result.data);
+  if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
+  redirect("/");
+}
+```
+
+## Surfacing errors in pages and forms
+Pages read both sets of params from `searchParams` and pass them as separate props:
+
+```tsx
+// page.tsx — reads both levels
+const { error, emailError, passwordError } = await searchParams;
+return <LoginForm error={error} fieldErrors={{ email: emailError, password: passwordError }} />;
+
+// form component — use <Input> with label/validate/error props (no separate FormField needed)
+<Input id="email" name="email" label="Email" validate="email" error={fieldErrors?.email} />
+```
+
+## Site URL guard
+Never inline `process.env.NEXT_PUBLIC_SITE_URL` — use a guard that throws at startup:
+
+```typescript
+function getSiteUrl(): string {
+  const url = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!url) throw new Error("NEXT_PUBLIC_SITE_URL is not set.");
+  return url.replace(/\/$/, "");
+}
+```

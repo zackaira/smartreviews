@@ -1,0 +1,40 @@
+---
+description: Security conventions — open redirects, input validation, auth flow, Supabase
+alwaysApply: true
+---
+
+# Security Conventions
+
+## Open redirects
+Never pass a user-supplied value directly to `NextResponse.redirect()` or `redirect()`.
+Always validate that redirect targets are safe relative paths:
+
+```typescript
+// ❌ BAD — attacker can supply ?next=https://evil.com
+const next = searchParams.get("next") ?? "/";
+return NextResponse.redirect(new URL(next, request.url));
+
+// ✅ GOOD
+function safeRelativePath(next: string | null): string {
+  if (next && /^\/(?!\/)/.test(next)) return next;
+  return "/";
+}
+```
+
+## FormData — never cast to string
+See `server-actions` rule. `formData.get()` returns `File | string | null`.
+
+## Supabase
+- **Never** use `getSession()` server-side — it reads from the cookie without re-validating. Always use `getUser()` which hits the Supabase Auth server.
+- **Never** expose `SUPABASE_SERVICE_ROLE_KEY` in client components or `NEXT_PUBLIC_` vars. It bypasses Row-Level Security entirely.
+- Use `@/lib/supabase/server` in all server contexts; `@/lib/supabase/browser` only in Client Components.
+
+## Password reset flow
+Require **both** a valid session **and** a short-lived `HttpOnly` recovery cookie to access `/reset-password`. The cookie is set in `/auth/confirm` only when `type === "recovery"` and is cleared after a successful password update. This prevents any logged-in user reaching the reset form outside the email flow.
+
+## Security headers
+All HTTP security headers are configured in `next.config.ts` and applied globally.
+Do not remove or weaken: `X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`, `Referrer-Policy`, `Permissions-Policy`.
+
+## Row-Level Security
+Every Supabase table must have RLS enabled. The anon key is public and can read any table without RLS.

@@ -1,0 +1,8 @@
+-- Seed data for local development.
+-- This file runs automatically after migrations when you run:
+--   supabase db reset
+--
+-- Add development-only test data here. Never commit real credentials.
+-- Example:
+-- INSERT INTO public.profiles (id, full_name) VALUES
+--   ('00000000-0000-0000-0000-000000000001', 'Test User');

@@ -1,0 +1,62 @@
+---
+description: Server Component first, minimal client boundaries, page conventions
+globs: "**/*.tsx"
+alwaysApply: false
+---
+
+# Next.js Component Conventions
+
+## Core rule — Server Components are the default
+
+**Every component must be a Server Component unless it has a specific reason not to be.**
+
+The only valid reasons to add `"use client"` are:
+- The component uses a React hook (`useState`, `useEffect`, `useActionState`, etc.)
+- The component accesses browser-only APIs (`window`, `document`, etc.)
+- The component uses a third-party library that requires a client boundary
+
+`"use client"` must be placed on the **smallest possible leaf component** — the one that actually needs it. Never add it to a page, layout, or any wrapper that could remain a Server Component.
+
+```tsx
+// ❌ BAD — entire page becomes a client bundle just for one interactive button
+"use client";
+export default function SettingsPage() {
+  return (
+    <div>
+      <h1>Settings</h1>       {/* static — didn't need to be client */}
+      <UserInfo />             {/* static — didn't need to be client */}
+      <DeleteAccountButton />  {/* only this needed "use client" */}
+    </div>
+  );
+}
+
+// ✅ GOOD — only the interactive leaf is a client component
+export default function SettingsPage() {   // Server Component
+  return (
+    <div>
+      <h1>Settings</h1>
+      <UserInfo />
+      <DeleteAccountButton />  {/* "use client" lives inside this file only */}
+    </div>
+  );
+}
+```
+
+## Page conventions
+- Pages are `async` Server Components
+- Read `searchParams` as a Promise (Next.js 15): `searchParams: Promise<{ key?: string }>`
+- Export `metadata` from every page
+- Pass URL data as plain props to children — never use `useSearchParams` in a Client Component when the page can read it first
+
+## Route-scoped components
+- Components used by only one route live in a `_components/` folder alongside the page
+- The `_` prefix prevents Next.js treating the folder as a route segment
+
+## Forms
+- Form components should be Server Components using `action={serverAction}`
+- Use `<SubmitButton>` from `@/components/submit-button` for pending state — it uses `useFormStatus` internally and works inside Server Component forms
+- If `useActionState` is genuinely needed, extract only the stateful part into a client component; keep the surrounding form/layout as a Server Component
+
+## Error state from actions
+Redirect with `?error=` on failure so forms stay as Server Components.
+Never return error strings from actions and catch them with `useActionState`.

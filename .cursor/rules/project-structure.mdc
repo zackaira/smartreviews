@@ -1,0 +1,95 @@
+---
+description: File naming, lib structure, import conventions, and third-party abstraction
+alwaysApply: true
+---
+
+# Project Structure
+
+## lib/ naming
+- Domains with multiple files get a subdirectory: `lib/auth/`, `lib/supabase/`
+- Within a named subdirectory, generic names are correct: `actions.ts`, `server.ts`, `browser.ts` — the directory provides the namespace
+- Standalone concerns stay flat with a descriptive name: `lib/prisma.ts`, `lib/utils.ts`
+- Never prefix a file with its parent directory name (e.g. `lib/auth/auth-actions.ts` is wrong; `lib/auth/actions.ts` is correct)
+
+## Supabase client selection
+| Context | Import |
+|---|---|
+| Browser / Client Component | `@/lib/supabase/browser` |
+| Server Component / Action / Route Handler | `@/lib/supabase/server` |
+| Next.js middleware | `@/lib/supabase/middleware` |
+
+## Import rules
+- Always use `@/` alias — never relative paths that cross the `src/` boundary
+- Import components from `@/components/<name>` (our wrappers), **never** from `@/components/ui/<name>` directly
+- `src/components/ui/` is ShadCN-generated — treat it as read-only; all customisation goes in the wrapper
+
+## Third-party library abstraction
+
+**Always wrap third-party libraries behind a single abstraction layer.**
+
+If the library is ever swapped out, only the wrapper changes — not every file that uses it.
+
+### Where wrappers live
+| Type | Location | Example |
+|---|---|---|
+| UI component library | `src/components/<name>.tsx` | `components/button.tsx` wraps ShadCN |
+| Utility / logic library | `src/lib/<domain>.ts` or `src/lib/<domain>/index.ts` | `lib/validation.ts` wraps Zod |
+
+### Example — validation library (Zod)
+```typescript
+// src/lib/validation.ts  ← the only file that imports from "zod"
+import { z } from "zod";
+
+export { z };
+export type { ZodSchema, ZodError } from "zod";
+
+export const emailSchema = z.string().email("Invalid email address");
+export const passwordSchema = z.string().min(8, "Password must be at least 8 characters");
+
+// Shared parse helper — swap the library here without touching callers
+export function parseSchema<T>(schema: z.ZodSchema<T>, data: unknown) {
+  return schema.safeParse(data);
+}
+```
+
+Callers import from `@/lib/validation`, never directly from `"zod"`. If Zod is later replaced with Valibot or Yup, only `lib/validation.ts` changes.
+
+### What to wrap
+- Validation libraries (Zod, Valibot, Yup)
+- Date/time libraries (date-fns, dayjs, Temporal)
+- Analytics / tracking (Posthog, Segment)
+- Email providers (Resend, Nodemailer)
+- File storage helpers (beyond the Supabase client)
+- Any library likely to be upgraded or swapped in future
+
+### What NOT to wrap
+Standard library utilities and stable, low-level packages that have no realistic swap candidate (e.g. `clsx`, `tailwind-merge` — already wrapped inside `lib/utils.ts`).
+
+## Input as a full form field
+`@/components/input` is the complete form field component — it renders a label, the input, and a per-field error in one unit. Use `validate` for shorthand HTML5 constraint attributes:
+
+```tsx
+// Bare input (no label/error) — same as always
+<Input name="q" type="search" placeholder="Search…" />
+
+// Full field with label, validation, and per-field error
+<Input
+  id="email"
+  name="email"
+  label="Email"
+  placeholder="you@example.com"
+  validate="email"           // sets type, autoComplete, required automatically
+  error={fieldErrors?.email}
+/>
+
+// With a label action (e.g. "Forgot password?" link)
+<Input id="password" name="password" label="Password" validate="password"
+  labelAction={<Link href="/forgot-password">Forgot password?</Link>} />
+```
+
+Available `validate` values: `required` · `email` · `password` · `new-password` · `url` · `tel` · `number`
+
+## When adding a new ShadCN component
+1. Run `npx shadcn@latest add <component>` — it lands in `src/components/ui/`
+2. Immediately create a wrapper in `src/components/<name>.tsx` that re-exports it
+3. Use only the wrapper everywhere in the app

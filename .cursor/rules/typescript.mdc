@@ -1,0 +1,59 @@
+---
+description: TypeScript conventions — type imports, wrapper types, no-any, async patterns
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# TypeScript Conventions
+
+## Type imports
+Always use `import type` for types and interfaces to keep runtime bundles clean:
+```typescript
+// ❌ BAD
+import { ButtonProps } from "@/components/button";
+
+// ✅ GOOD
+import type { ButtonProps } from "@/components/button";
+```
+
+## Wrapper component types
+Derive prop types from the primitive rather than redefining them:
+```typescript
+// ❌ BAD — duplicates the type definition
+interface ButtonProps { variant?: string; size?: string; ... }
+
+// ✅ GOOD — stays in sync automatically
+type ButtonProps = React.ComponentProps<typeof ButtonPrimitive>;
+```
+
+## No `as` casting for external input
+Never cast values you don't control (FormData, URL params, API responses):
+```typescript
+// ❌ BAD
+const value = formData.get("email") as string;
+
+// ✅ GOOD
+const value = formData.get("email");
+if (typeof value !== "string") { /* handle */ }
+```
+
+## Async / floating promises
+All `async` functions must be awaited at the call site. The ESLint rule `@typescript-eslint/no-floating-promises` enforces this — do not disable it.
+
+## Unused variables
+Prefix intentionally unused parameters with `_`:
+```typescript
+function handler(_req: Request, res: Response) { ... }
+```
+
+## Avoid `any`
+The ESLint config warns on `any`. If the type is genuinely unknown, use `unknown` and narrow it:
+```typescript
+// ❌ BAD
+catch (e: any) { console.log(e.message) }
+
+// ✅ GOOD
+catch (e) {
+  const message = e instanceof Error ? e.message : String(e);
+}
+```
